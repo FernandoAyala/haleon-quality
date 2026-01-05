@@ -1,0 +1,7 @@
+{
+  "name": "Haleon Quality Agent",
+  "description": "Conversational AI agent for Operational Quality Management at Haleon, powered by OpenAI Realtime API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
