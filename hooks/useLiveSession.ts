@@ -63,9 +63,12 @@ interface LiveSessionHook {
   volume: number;
   transcripts: TranscriptItem[];
   isMuted: boolean;
+  isMicActive: boolean;
   connect: () => void;
   disconnect: () => void;
   toggleMute: () => void;
+  toggleMic: () => void;
+  sendTextMessage: (text: string) => void;
 }
 
 export const useLiveSession = (): LiveSessionHook => {
@@ -73,6 +76,7 @@ export const useLiveSession = (): LiveSessionHook => {
   const [volume, setVolume] = useState<number>(0);
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isMicActive, setIsMicActive] = useState<boolean>(false);
   
   const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -81,6 +85,8 @@ export const useLiveSession = (): LiveSessionHook => {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const isMutedRef = useRef<boolean>(false);
+  const isMicActiveRef = useRef<boolean>(false);
 
   const updateVolume = useCallback(() => {
     if (!analyserRef.current) return;
@@ -213,8 +219,8 @@ export const useLiveSession = (): LiveSessionHook => {
                 }];
               });
               
-              // Reproducir con síntesis de voz si no está muteado
-              if (!isMuted) {
+              // Reproducir con síntesis de voz si no está muteado (usar ref para valor actual)
+              if (!isMutedRef.current) {
                 speakText(message.transcript);
               }
             }
@@ -242,7 +248,7 @@ export const useLiveSession = (): LiveSessionHook => {
 
       // Enviar audio al WebSocket
       processor.onaudioprocess = (e) => {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === WebSocket.OPEN && isMicActiveRef.current) {
           const inputData = e.inputBuffer.getChannelData(0);
           const pcmData = new Int16Array(inputData.length);
           
@@ -307,6 +313,8 @@ export const useLiveSession = (): LiveSessionHook => {
     processorRef.current = null;
     
     setVolume(0);
+    setIsMicActive(false);
+    isMicActiveRef.current = false;
     setStatus(ConnectionStatus.DISCONNECTED);
   }, []);
 
@@ -336,6 +344,7 @@ export const useLiveSession = (): LiveSessionHook => {
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
       const newMuted = !prev;
+      isMutedRef.current = newMuted;
       if (newMuted) {
         // Cancelar cualquier síntesis en curso
         window.speechSynthesis.cancel();
@@ -343,6 +352,52 @@ export const useLiveSession = (): LiveSessionHook => {
       return newMuted;
     });
   }, []);
+
+  // Enviar mensaje de texto
+  const sendTextMessage = useCallback((text: string) => {
+    if (!text.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    // Agregar mensaje del usuario a los transcripts
+    setTranscripts(prev => [...prev, {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      text: text.trim(),
+      timestamp: new Date()
+    }]);
+
+    // Enviar mensaje al WebSocket
+    wsRef.current.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: text.trim()
+        }]
+      }
+    }));
+
+    // Solicitar respuesta
+    wsRef.current.send(JSON.stringify({
+      type: 'response.create'
+    }));
+  }, []);
+
+  // Toggle micrófono
+  const toggleMic = useCallback(() => {
+    if (status !== ConnectionStatus.CONNECTED) {
+      return;
+    }
+    
+    setIsMicActive(prev => {
+      const newActive = !prev;
+      isMicActiveRef.current = newActive;
+      return newActive;
+    });
+  }, [status]);
 
   // Cleanup al desmontar
   useEffect(() => {
@@ -357,8 +412,11 @@ export const useLiveSession = (): LiveSessionHook => {
     volume,
     transcripts,
     isMuted,
+    isMicActive,
     connect,
     disconnect,
-    toggleMute
+    toggleMute,
+    toggleMic,
+    sendTextMessage
   };
 };

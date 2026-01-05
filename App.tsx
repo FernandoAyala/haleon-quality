@@ -4,13 +4,15 @@ import {
     Box,
     Mic,
     MicOff,
+    Power,
+    Send,
     ShieldCheck,
     User,
     Volume2,
     VolumeX,
     Zap
 } from 'lucide-react';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { useLiveSession } from './hooks';
 import { ConnectionStatus } from './types';
@@ -105,8 +107,9 @@ const FormattedText: React.FC<{ text: string }> = ({ text }) => {
 };
 
 const App: React.FC = () => {
-  const { status, volume, transcripts, isMuted, connect, disconnect, toggleMute } = useLiveSession();
+  const { status, volume, transcripts, isMuted, isMicActive, connect, disconnect, toggleMute, toggleMic, sendTextMessage } = useLiveSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [textMessage, setTextMessage] = useState<string>('');
 
   // Auto-scroll transcripts
   useEffect(() => {
@@ -124,6 +127,28 @@ const App: React.FC = () => {
   const isConnected = status === ConnectionStatus.CONNECTED;
   const isError = status === ConnectionStatus.ERROR;
   const isConnecting = status === ConnectionStatus.CONNECTING;
+
+  const handleConnectionToggle = () => {
+    if (isConnected || isConnecting) {
+      disconnect();
+    } else {
+      connect();
+    }
+  };
+
+  const handleSendTextMessage = () => {
+    if (textMessage.trim() && isConnected) {
+      sendTextMessage(textMessage);
+      setTextMessage('');
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendTextMessage();
+    }
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -237,7 +262,46 @@ const App: React.FC = () => {
         </div>
 
         {/* Control Footer */}
-        <div className="h-32 bg-white border-t border-slate-200 flex items-center px-6 md:px-12 justify-center relative shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+          
+          {/* Text Input Area */}
+          <div className="px-6 py-3 border-b border-slate-100">
+            <div className="max-w-4xl mx-auto flex items-center space-x-3">
+              <input
+                type="text"
+                value={textMessage}
+                onChange={(e) => setTextMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                disabled={!isConnected}
+                placeholder={isConnected ? "Escribe tu mensaje aquí..." : "Conéctate para escribir"}
+                className={`
+                  flex-1 px-4 py-2.5 rounded-lg border text-sm
+                  focus:outline-none focus:ring-2 transition-all
+                  ${isConnected 
+                    ? 'border-slate-300 bg-white focus:ring-[#a3d900]/30 focus:border-[#a3d900] text-slate-800' 
+                    : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                  }
+                `}
+              />
+              <button
+                onClick={handleSendTextMessage}
+                disabled={!isConnected || !textMessage.trim()}
+                className={`
+                  flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200
+                  ${isConnected && textMessage.trim()
+                    ? 'bg-[#a3d900] hover:bg-[#95c600] text-slate-900 hover:scale-105 active:scale-95' 
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }
+                `}
+                title="Enviar mensaje"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Voice Control Area */}
+          <div className="h-28 flex items-center px-6 md:px-12 justify-center relative">
             
             {/* Visualizer Background (centered absolute) */}
             <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
@@ -246,23 +310,46 @@ const App: React.FC = () => {
                  </div>
             </div>
 
-            {/* Main Action Button and Mute Button */}
+            {/* Control Buttons */}
             <div className="relative z-10 flex items-center space-x-4">
+              {/* Connection Button */}
               <button
-                onClick={handleToggle}
+                onClick={handleConnectionToggle}
                 disabled={isConnecting}
                 className={`
-                  flex items-center justify-center w-16 h-16 rounded-full shadow-lg transition-all duration-300
+                  flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-300
                   ${isConnected 
-                    ? 'bg-red-500 hover:bg-red-600 text-white' 
-                    : 'bg-[#a3d900] hover:bg-[#95c600] text-slate-900'
+                    ? 'bg-green-500 hover:bg-green-600 text-white' 
+                    : isError 
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : 'bg-slate-600 hover:bg-slate-700 text-white'
                   }
                   ${isConnecting ? 'opacity-50 cursor-not-allowed scale-95' : 'hover:scale-105 active:scale-95'}
                 `}
+                title={isConnected ? 'Desconectar' : 'Conectar'}
               >
                 {isConnecting ? (
-                  <div className="w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                ) : isConnected ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Power className="w-5 h-5" />
+                )}
+              </button>
+
+              {/* Mic Button */}
+              <button
+                onClick={toggleMic}
+                disabled={!isConnected}
+                className={`
+                  flex items-center justify-center w-16 h-16 rounded-full shadow-lg transition-all duration-300
+                  ${isMicActive
+                    ? 'bg-red-500 hover:bg-red-600 text-white' 
+                    : 'bg-[#a3d900] hover:bg-[#95c600] text-slate-900'
+                  }
+                  ${!isConnected ? 'opacity-30 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}
+                `}
+                title={isMicActive ? 'Desactivar micrófono' : 'Activar micrófono'}
+              >
+                {isMicActive ? (
                   <MicOff className="w-6 h-6" />
                 ) : (
                   <Mic className="w-6 h-6" />
@@ -292,9 +379,10 @@ const App: React.FC = () => {
             </div>
 
             {/* Status Text below button */}
-            <div className="absolute bottom-4 left-0 w-full text-center text-xs font-medium text-slate-400 uppercase tracking-wider pointer-events-none">
-              {isConnected ? 'Escuchando...' : 'Presiona para hablar'}
+            <div className="absolute bottom-3 left-0 w-full text-center text-xs font-medium text-slate-400 uppercase tracking-wider pointer-events-none">
+              {!isConnected ? 'Desconectado' : isMicActive ? 'Escuchando...' : 'Micrófono inactivo'}
             </div>
+          </div>
         </div>
       </main>
     </div>
