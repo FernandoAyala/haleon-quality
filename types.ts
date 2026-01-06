@@ -10,6 +10,14 @@ export interface TranscriptItem {
   timestamp: Date;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  transcripts: TranscriptItem[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export enum ConnectionStatus {
   DISCONNECTED = 'disconnected',
   CONNECTING = 'connecting',

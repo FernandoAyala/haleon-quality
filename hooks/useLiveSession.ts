@@ -69,6 +69,8 @@ interface LiveSessionHook {
   toggleMute: () => void;
   toggleMic: () => void;
   sendTextMessage: (text: string) => void;
+  setTranscripts: (transcripts: TranscriptItem[]) => void;
+  clearTranscripts: () => void;
 }
 
 export const useLiveSession = (): LiveSessionHook => {
@@ -83,6 +85,7 @@ export const useLiveSession = (): LiveSessionHook => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isMutedRef = useRef<boolean>(false);
@@ -118,6 +121,7 @@ export const useLiveSession = (): LiveSessionHook => {
       audioContextRef.current = audioContext;
       
       const source = audioContext.createMediaStreamSource(stream);
+      sourceRef.current = source;
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
@@ -127,7 +131,7 @@ export const useLiveSession = (): LiveSessionHook => {
       // Crear procesador de audio para enviar datos al WebSocket
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
-      source.connect(processor);
+      // NO conectar el processor inicialmente - el usuario debe activar el micrófono manualmente
       processor.connect(audioContext.destination);
 
       // Conectar a OpenAI Realtime API
@@ -395,6 +399,23 @@ export const useLiveSession = (): LiveSessionHook => {
     setIsMicActive(prev => {
       const newActive = !prev;
       isMicActiveRef.current = newActive;
+      
+      // Desconectar/reconectar el procesador de audio
+      if (sourceRef.current && processorRef.current) {
+        try {
+          if (newActive) {
+            // Reconectar
+            sourceRef.current.connect(processorRef.current);
+          } else {
+            // Desconectar para que no procese audio
+            sourceRef.current.disconnect(processorRef.current);
+          }
+        } catch (error) {
+          // Ignorar errores si ya está conectado/desconectado
+          console.log('Toggle mic state change:', newActive);
+        }
+      }
+      
       return newActive;
     });
   }, [status]);
@@ -407,6 +428,11 @@ export const useLiveSession = (): LiveSessionHook => {
     };
   }, [disconnect]);
 
+  // Función para limpiar transcripts
+  const clearTranscripts = useCallback(() => {
+    setTranscripts([]);
+  }, []);
+
   return {
     status,
     volume,
@@ -417,6 +443,8 @@ export const useLiveSession = (): LiveSessionHook => {
     disconnect,
     toggleMute,
     toggleMic,
-    sendTextMessage
+    sendTextMessage,
+    setTranscripts,
+    clearTranscripts
   };
 };

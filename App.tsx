@@ -2,6 +2,7 @@ import {
     Activity,
     Bot,
     Box,
+    MessageSquare,
     Mic,
     MicOff,
     Power,
@@ -14,7 +15,8 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { AudioVisualizer } from './components/AudioVisualizer';
-import { useLiveSession } from './hooks';
+import { SessionHistory } from './components/SessionHistory';
+import { useChatSessions, useLiveSession } from './hooks';
 import { ConnectionStatus } from './types';
 
 // Función para parsear texto con markdown (negritas)
@@ -107,26 +109,30 @@ const FormattedText: React.FC<{ text: string }> = ({ text }) => {
 };
 
 const App: React.FC = () => {
-  const { status, volume, transcripts, isMuted, isMicActive, connect, disconnect, toggleMute, toggleMic, sendTextMessage } = useLiveSession();
+  const { status, volume, transcripts, isMuted, isMicActive, connect, disconnect, toggleMute, toggleMic, sendTextMessage, setTranscripts, clearTranscripts } = useLiveSession();
+  const { sessions, currentSessionId, createNewSession, loadSession, saveCurrentSession, deleteSession } = useChatSessions();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [textMessage, setTextMessage] = useState<string>('');
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
   // Auto-scroll transcripts
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcripts]);
 
-  const handleToggle = () => {
-    if (status === ConnectionStatus.CONNECTED || status === ConnectionStatus.CONNECTING) {
-      disconnect();
-    } else {
-      connect();
+  // Guardar sesión automáticamente cuando cambien los transcripts
+  useEffect(() => {
+    if (transcripts.length > 0 && currentSessionId) {
+      saveCurrentSession(transcripts);
     }
-  };
+  }, [transcripts, currentSessionId, saveCurrentSession]);
 
-  const isConnected = status === ConnectionStatus.CONNECTED;
-  const isError = status === ConnectionStatus.ERROR;
-  const isConnecting = status === ConnectionStatus.CONNECTING;
+  // Crear nueva sesión al inicio si no existe
+  useEffect(() => {
+    if (!currentSessionId && transcripts.length === 0) {
+      createNewSession().catch(err => console.error('Error creando sesión:', err));
+    }
+  }, [currentSessionId, transcripts.length, createNewSession]);
 
   const handleConnectionToggle = () => {
     if (isConnected || isConnecting) {
@@ -150,8 +156,35 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSelectSession = (sessionId: string) => {
+    const session = loadSession(sessionId);
+    if (session) {
+      setTranscripts(session.transcripts);
+    }
+  };
+
+  const handleNewSession = async () => {
+    clearTranscripts();
+    await createNewSession();
+  };
+
+  const isConnected = status === ConnectionStatus.CONNECTED;
+  const isError = status === ConnectionStatus.ERROR;
+  const isConnecting = status === ConnectionStatus.CONNECTING;
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
+      {/* Session History Modal */}
+      <SessionHistory
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        onSelectSession={handleSelectSession}
+        onDeleteSession={deleteSession}
+        onNewSession={handleNewSession}
+      />
+
       {/* Sidebar - Context & Role */}
       <aside className="w-80 bg-slate-900 text-white flex flex-col hidden md:flex">
         <div className="p-6 border-b border-slate-700">
@@ -212,6 +245,13 @@ const App: React.FC = () => {
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm z-10">
           <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Historial de sesiones"
+            >
+              <MessageSquare className="w-5 h-5 text-slate-600" />
+            </button>
             <h2 className="text-lg font-semibold text-slate-800">
               Asistente de Calidad Operacional
             </h2>

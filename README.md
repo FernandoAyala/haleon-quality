@@ -16,5 +16,17 @@ View your app in AI Studio: https://ai.studio/apps/temp/2
 1. Install dependencies:
    `npm install`
 2. Set the `OPENAI_API_KEY` in [.env.local](.env.local) to your OpenAI API key
-3. Run the app:
+3. Configure Firebase (optional but recommended for cloud storage):
+   - See [FIREBASE_README.md](FIREBASE_README.md) for detailed setup instructions
+   - Set Firebase credentials in [.env.local](.env.local)
+4. Run the app:
    `npm run dev`
+
+## Features
+
+- 🎤 Real-time voice interaction with OpenAI Realtime API
+- 💬 Text input for noisy environments
+- 🔇 Mute control for audio responses
+- 📝 Session history with Firebase cloud storage
+- 🎯 Quality management context for Haleon manufacturing
+- 🌐 Multi-device sync (with Firebase configured)
