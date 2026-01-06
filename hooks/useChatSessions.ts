@@ -11,7 +11,7 @@ import {
     updateDoc,
     writeBatch
 } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '../firebase';
 import { ChatSession, TranscriptItem } from '../types';
 
@@ -43,6 +43,12 @@ export const useChatSessions = (): UseChatSessionsResult => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const userId = getUserId();
+  const sessionsRef = useRef<ChatSession[]>([]);
+
+  // Mantener sessionsRef actualizado
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
   // Cargar sesiones de Firebase al inicio
   const fetchSessions = useCallback(async () => {
@@ -101,7 +107,8 @@ export const useChatSessions = (): UseChatSessionsResult => {
 
   useEffect(() => {
     fetchSessions();
-  }, [fetchSessions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo cargar al montar el componente
 
   // Crear nueva sesión en Firebase
   const createNewSession = useCallback(async (): Promise<string> => {
@@ -120,6 +127,8 @@ export const useChatSessions = (): UseChatSessionsResult => {
         createdAt: Timestamp.fromDate(newSession.createdAt),
         updatedAt: Timestamp.fromDate(newSession.updatedAt)
       });
+
+      console.log('✅ Sesión creada:', docRef.id);
 
       const sessionWithId: ChatSession = {
         ...newSession,
@@ -159,7 +168,7 @@ export const useChatSessions = (): UseChatSessionsResult => {
   const saveCurrentSession = useCallback(async (transcripts: TranscriptItem[]) => {
     if (!currentSessionId) return;
 
-    const session = sessions.find(s => s.id === currentSessionId);
+    const session = sessionsRef.current.find(s => s.id === currentSessionId);
     if (!session) return;
 
     // Generar título basado en el primer mensaje del usuario
@@ -189,7 +198,9 @@ export const useChatSessions = (): UseChatSessionsResult => {
         updatedAt: Timestamp.fromDate(updatedSession.updatedAt)
       });
 
-      const updatedSessions = sessions.map(s => 
+      console.log('✅ Guardado:', transcripts.length, 'mensajes');
+
+      const updatedSessions = sessionsRef.current.map(s => 
         s.id === currentSessionId ? updatedSession : s
       );
       setSessions(updatedSessions);
@@ -199,13 +210,13 @@ export const useChatSessions = (): UseChatSessionsResult => {
     } catch (error) {
       console.error('Error al guardar sesión en Firebase:', error);
       // Fallback a localStorage
-      const updatedSessions = sessions.map(s => 
+      const updatedSessions = sessionsRef.current.map(s => 
         s.id === currentSessionId ? updatedSession : s
       );
       setSessions(updatedSessions);
       localStorage.setItem('haleon_chat_sessions', JSON.stringify(updatedSessions));
     }
-  }, [currentSessionId, sessions, userId]);
+  }, [currentSessionId, userId]);
 
   // Eliminar sesión de Firebase
   const deleteSession = useCallback(async (sessionId: string) => {

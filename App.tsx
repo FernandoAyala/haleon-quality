@@ -112,6 +112,7 @@ const App: React.FC = () => {
   const { status, volume, transcripts, isMuted, isMicActive, connect, disconnect, toggleMute, toggleMic, sendTextMessage, setTranscripts, clearTranscripts } = useLiveSession();
   const { sessions, currentSessionId, createNewSession, loadSession, saveCurrentSession, deleteSession } = useChatSessions();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hasCreatedInitialSession = useRef<boolean>(false);
   const [textMessage, setTextMessage] = useState<string>('');
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
@@ -127,17 +128,15 @@ const App: React.FC = () => {
     }
   }, [transcripts, currentSessionId, saveCurrentSession]);
 
-  // Crear nueva sesión al inicio si no existe
-  useEffect(() => {
-    if (!currentSessionId && transcripts.length === 0) {
-      createNewSession().catch(err => console.error('Error creando sesión:', err));
-    }
-  }, [currentSessionId, transcripts.length, createNewSession]);
-
-  const handleConnectionToggle = () => {
+  const handleConnectionToggle = async () => {
     if (isConnected || isConnecting) {
       disconnect();
     } else {
+      // Crear sesión antes de conectar si no existe
+      if (!currentSessionId && !hasCreatedInitialSession.current) {
+        hasCreatedInitialSession.current = true;
+        await createNewSession();
+      }
       connect();
     }
   };
@@ -165,6 +164,7 @@ const App: React.FC = () => {
 
   const handleNewSession = async () => {
     clearTranscripts();
+    hasCreatedInitialSession.current = true; // Evitar crear sesiones duplicadas
     await createNewSession();
   };
 
@@ -243,18 +243,20 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 flex flex-col relative">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm z-10">
-          <div className="flex items-center space-x-4">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 shadow-sm z-10">
+          <div className="flex items-center space-x-2 md:space-x-4">
             <button
               onClick={() => setIsHistoryOpen(true)}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
               title="Historial de sesiones"
             >
               <MessageSquare className="w-5 h-5 text-slate-600" />
             </button>
-            <h2 className="text-lg font-semibold text-slate-800">
+            <h2 className="text-sm md:text-lg font-semibold text-slate-800 truncate">
               Asistente de Calidad Operacional
             </h2>
+          </div>
+          <div className="flex items-center space-x-2">
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
               isConnected ? 'bg-green-100 text-green-700 border-green-200' :
               isError ? 'bg-red-100 text-red-700 border-red-200' :
@@ -265,13 +267,10 @@ const App: React.FC = () => {
                status === 'error' ? 'Error' : 'Desconectado'}
             </span>
           </div>
-          <div className="text-sm text-slate-500">
-             Planta de Manufactura: <span className="font-medium text-slate-700">Buenos Aires</span>
-          </div>
         </header>
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50 scrollbar-hide">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6 bg-slate-50 scrollbar-hide">
           {transcripts.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
                <Box className="w-16 h-16 mb-4 stroke-1" />
